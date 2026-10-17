@@ -1,0 +1,264 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Lyric Video</title> <link rel="stylesheet" href="style.css">
+
+</head>
+
+<body>
+  <div id="bar"></div>
+
+  <div id="stage" title="Click for next line"></div>
+
+  <div id="dock">
+    <button id="prev">Back</button>
+    <button id="play">Play</button>
+    <button id="next">Next</button>
+    <button id="edit">Edit lyrics</button>
+  </div>
+
+  <div id="panel">
+    <div class="in-wrap">
+      <label>
+        Song title
+        <input id="title" value="Cinderella">
+      </label>
+
+      <label>
+        Artist
+        <input id="artist" value="Mac Miller">
+      </label>
+
+      <label>
+        Lyrics (one line per row, paste your own)
+        <textarea id="lyrics">I been waitin' all night for this moment
+I been waitin' all year for this moment
+I been picturin' you takin' off your clothes for me
+I been literally curvin' all these hoes for you
+Daddy told you, better bring your ass home
+Cinderella, better get your ass home
+Man, I swear that parents just don't understand
+You ain't gotta be old to be a man
+Take my hand, come with me to my room
+</textarea>
+      </label>
+
+      <label>
+        Seconds per line
+        <input
+          id="secs"
+          type="number"
+          min="1"
+          max="15"
+          step="0.5"
+          value="3.5"
+        >
+      </label>
+
+        <label>
+          Song file (optional, plays while lyrics run)
+          <input id="audio" type="file" accept="audio/*">
+        </label>
+
+      <button id="save">Save and restart</button>
+    </div>
+  </div>
+
+  <audio id="player"></audio>
+
+  <script>
+    var $ = function (i) {
+      return document.getElementById(i);
+    };
+
+    var stage = $('stage');
+    var lines = [];
+    var idx = -1;
+    var timer = null;
+    var playing = false;
+
+    function esc(s) {
+      return s.replace(/[&<>]/g, function (c) {
+        return {
+          '&': '&amp;',
+          '<': '&lt;',
+          '>': '&gt;'
+        }[c];
+      });
+    }
+
+    function words(t) {
+      return t.trim().split(/\s+/).map(function (w, i) {
+        return '<span class="w" style="--d:' + (i * 90) + 'ms">' +
+          esc(w) +
+          '</span>';
+      }).join(' ');
+    }
+
+    function render(html) {
+      var old = stage.querySelector('.card:not(.out)');
+
+      if (old) {
+        old.classList.add('out');
+
+        setTimeout(function () {
+          old.remove();
+        }, 550);
+      }
+
+      var el = document.createElement('div');
+      el.className = 'card';
+      el.innerHTML = html;
+
+      stage.appendChild(el);
+
+      requestAnimationFrame(function () {
+        requestAnimationFrame(function () {
+          el.classList.add('in');
+        });
+      });
+    }
+
+    function show(i) {
+      idx = Math.max(-1, Math.min(lines.length - 1, i));
+
+      if (idx === -1) {
+        render(
+          '<h1 class="t1">' + words($('title').value) + '</h1>' +
+          '<h1 class="t2">' + words($('artist').value) + '</h1>'
+        );
+      } else {
+        render(
+          '<p class="' + (idx % 2 ? 'wt' : 'y') + '">' +
+          words(lines[idx]) +
+          '</p>'
+        );
+      }
+
+      $('bar').style.width = ((idx + 1) / lines.length * 100) + '%';
+    }
+
+    function secs() {
+      return (parseFloat($('secs').value) || 3.5) * 1000;
+    }
+
+    function tick() {
+      if (!playing) return;
+
+      if (idx >= lines.length - 1) {
+        stop();
+        return;
+      }
+
+      show(idx + 1);
+      timer = setTimeout(tick, secs());
+    }
+
+    function start() {
+      if (playing) return;
+
+      playing = true;
+      $('play').textContent = 'Pause';
+
+      if ($('player').src) {
+        $('player').play();
+      }
+
+      if (idx === -1 && !stage.querySelector('.card')) {
+        show(-1);
+      }
+
+      timer = setTimeout(tick, idx === -1 ? 2800 : secs());
+    }
+
+    function stop() {
+      playing = false;
+      clearTimeout(timer);
+      $('play').textContent = 'Play';
+      $('player').pause();
+    }
+
+    function go(n) {
+      clearTimeout(timer);
+      show(idx + n);
+
+      if (playing) {
+        timer = setTimeout(tick, secs());
+      }
+    }
+
+    function load() {
+      lines = $('lyrics').value
+        .split('\n')
+        .map(function (l) {
+          return l.trim();
+        })
+        .filter(Boolean);
+
+      if (!lines.length) {
+        lines = ['Add some lyrics'];
+      }
+
+      stop();
+      $('player').currentTime = 0;
+      show(-1);
+    }
+
+    $('play').onclick = function () {
+      playing ? stop() : start();
+    };
+
+    $('next').onclick = function () {
+      go(1);
+    };
+
+    $('prev').onclick = function () {
+      go(-1);
+    };
+
+    stage.onclick = function () {
+      go(1);
+    };
+
+    $('edit').onclick = function () {
+      stop();
+      $('panel').classList.add('open');
+    };
+
+    $('save').onclick = function () {
+      $('panel').classList.remove('open');
+      load();
+    };
+
+    $('audio').onchange = function (e) {
+      var f = e.target.files[0];
+
+      if (f) {
+        $('player').src = URL.createObjectURL(f);
+      }
+    };
+
+    document.addEventListener('keydown', function (e) {
+      if ($('panel').classList.contains('open')) return;
+
+      if (e.code === 'Space') {
+        e.preventDefault();
+        playing ? stop() : start();
+      }
+
+      if (e.code === 'ArrowRight') {
+        go(1);
+      }
+
+      if (e.code === 'ArrowLeft') {
+        go(-1);
+      }
+    });
+
+    load();
+  </script>
+</body>
+</html>
